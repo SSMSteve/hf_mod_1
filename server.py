@@ -15,7 +15,33 @@ mcp = FastMCP("pr-agent")
 
 # PR template directory (shared across all modules)
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
+# Default PR templates
+DEFAULT_TEMPLATES = {
+    "bug.md": "Bug Fix",
+    "feature.md": "Feature",
+    "docs.md": "Documentation",
+    "refactor.md": "Refactor",
+    "test.md": "Test",
+    "performance.md": "Performance",
+    "security.md": "Security"
+}
 
+# Type mapping for PR templates
+TYPE_MAPPING = {
+    "bug": "bug.md",
+    "fix": "bug.md",
+    "feature": "feature.md",
+    "enhancement": "feature.md",
+    "docs": "docs.md",
+    "documentation": "docs.md",
+    "refactor": "refactor.md",
+    "cleanup": "refactor.md",
+    "test": "test.md",
+    "testing": "test.md",
+    "performance": "performance.md",
+    "optimization": "performance.md",
+    "security": "security.md"
+}
 
 # TODO: Implement tool functions here
 # Example structure for a tool:
@@ -61,8 +87,16 @@ async def analyze_file_changes(base_branch: str = "main", include_diff: bool = T
 @mcp.tool()
 async def get_pr_templates() -> str:
     """List available PR templates with their content."""
-    # TODO: Implement this tool
-    return json.dumps({"error": "Not implemented yet", "hint": "Read templates from TEMPLATES_DIR"})
+    templates = [
+        {
+            "filename": filename,
+            "type": template_type,
+            "content": (TEMPLATES_DIR / filename).read_text()
+        }
+        for filename, template_type in DEFAULT_TEMPLATES.items()
+    ]
+    
+    return json.dumps(templates, indent=2)
 
 
 @mcp.tool()
