@@ -8,7 +8,7 @@ import json
 import subprocess
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from mcp.server.fastmcp import FastMCP
 
@@ -94,12 +94,17 @@ async def analyze_file_changes(
         cwd = working_directory if working_directory else os.getcwd()
         
         # Debug output
-        debug_info = {
+        # FIX: Added type annotation Dict[str, Any] and initialized roots_check as {} instead of None
+        # WHY: Type checker was complaining about incompatible assignment when trying to assign
+        #      dict objects to debug_info["roots_check"] that was initially set to None.
+        #      The type annotation allows mixed value types, and empty dict initialization
+        #      maintains type consistency for subsequent dict assignments.
+        debug_info: Dict[str, Any] = {
             "provided_working_directory": working_directory,
             "actual_cwd": cwd,
             "server_process_cwd": os.getcwd(),
             "server_file_location": str(Path(__file__).parent),
-            "roots_check": None
+            "roots_check": {}  # Initialize as empty dict (was None before fix)
         }
         
         # Add roots debug info
