@@ -99,6 +99,7 @@ async def get_pr_templates() -> str:
     return json.dumps(templates, indent=2)
 
 
+
 @mcp.tool()
 async def suggest_template(changes_summary: str, change_type: str) -> str:
     """Let Claude analyze the changes and suggest the most appropriate PR template.
@@ -107,8 +108,26 @@ async def suggest_template(changes_summary: str, change_type: str) -> str:
         changes_summary: Your analysis of what the changes do
         change_type: The type of change you've identified (bug, feature, docs, refactor, test, etc.)
     """
-    # TODO: Implement this tool
-    return json.dumps({"error": "Not implemented yet", "hint": "Map change_type to templates"})
+    
+    # Get available templates
+    templates_response = await get_pr_templates()
+    templates = json.loads(templates_response)
+    
+    # Find matching template
+    template_file = TYPE_MAPPING.get(change_type.lower(), "feature.md")
+    selected_template = next(
+        (t for t in templates if t["filename"] == template_file),
+        templates[0]  # Default to first template if no match
+    )
+    
+    suggestion = {
+        "recommended_template": selected_template,
+        "reasoning": f"Based on your analysis: '{changes_summary}', this appears to be a {change_type} change.",
+        "template_content": selected_template["content"],
+        "usage_hint": "Claude can help you fill out this template based on the specific changes in your PR."
+    }
+    
+    return json.dumps(suggestion, indent=2)
 
 
 if __name__ == "__main__":
