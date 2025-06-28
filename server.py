@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Module 2: GitHub Actions Integration with MCP Prompts
-Extends the PR agent with webhook handling and standardized CI/CD workflows using Prompts.
+Module 3: Slack Notification Integration
+Combines all MCP primitives (Tools and Prompts) for complete team communication workflows.
 """
 
 import json
@@ -13,7 +13,7 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 # Initialize the FastMCP server
-mcp = FastMCP("pr-agent-actions")
+mcp = FastMCP("pr-agent-slack")
 
 # PR template directory (shared between starter and solution)
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
@@ -50,14 +50,13 @@ TYPE_MAPPING = {
 }
 
 
-# ===== Original Tools from Module 1 (with output limiting) =====
+# ===== Tools from Modules 1 & 2 (Complete with output limiting) =====
 
 @mcp.tool()
 async def analyze_file_changes(
     base_branch: str = "main",
     include_diff: bool = True,
-    max_diff_lines: int = 500,
-    working_directory: Optional[str] = None
+    max_diff_lines: int = 500
 ) -> str:
     """Get the full diff and list of changed files in the current git repository.
     
@@ -65,39 +64,21 @@ async def analyze_file_changes(
         base_branch: Base branch to compare against (default: main)
         include_diff: Include the full diff content (default: true)
         max_diff_lines: Maximum number of diff lines to include (default: 500)
-        working_directory: Directory to run git commands in (default: current directory)
     """
     try:
-        # Try to get working directory from roots first
-        if working_directory is None:
-            try:
-                context = mcp.get_context()
-                roots_result = await context.session.list_roots()
-                # Get the first root - Claude Code sets this to the CWD
-                root = roots_result.roots[0]
-                # FileUrl object has a .path property that gives us the path directly
-                working_directory = root.uri.path
-            except Exception:
-                # If we can't get roots, fall back to current directory
-                pass
-        
-        # Use provided working directory or current directory
-        cwd = working_directory if working_directory else os.getcwd()
         # Get list of changed files
         files_result = subprocess.run(
             ["git", "diff", "--name-status", f"{base_branch}...HEAD"],
             capture_output=True,
             text=True,
-            check=True,
-            cwd=cwd
+            check=True
         )
         
         # Get diff statistics
         stat_result = subprocess.run(
             ["git", "diff", "--stat", f"{base_branch}...HEAD"],
             capture_output=True,
-            text=True,
-            cwd=cwd
+            text=True
         )
         
         # Get the actual diff if requested
@@ -107,8 +88,7 @@ async def analyze_file_changes(
             diff_result = subprocess.run(
                 ["git", "diff", f"{base_branch}...HEAD"],
                 capture_output=True,
-                text=True,
-                cwd=cwd
+                text=True
             )
             diff_lines = diff_result.stdout.split('\n')
             
@@ -125,8 +105,7 @@ async def analyze_file_changes(
         commits_result = subprocess.run(
             ["git", "log", "--oneline", f"{base_branch}..HEAD"],
             capture_output=True,
-            text=True,
-            cwd=cwd
+            text=True
         )
         
         analysis = {
@@ -191,8 +170,6 @@ async def suggest_template(changes_summary: str, change_type: str) -> str:
     
     return json.dumps(suggestion, indent=2)
 
-
-# ===== New Module 2: GitHub Actions Tools =====
 
 @mcp.tool()
 async def get_recent_actions_events(limit: int = 10) -> str:
@@ -260,7 +237,94 @@ async def get_workflow_status(workflow_name: Optional[str] = None) -> str:
     return json.dumps(list(workflows.values()), indent=2)
 
 
-# ===== New Module 2: MCP Prompts =====
+# ===== New Module 3: Slack Integration Tools =====
+
+@mcp.tool()
+async def send_slack_notification(message: str) -> str:
+    """Send a formatted notification to the team Slack channel.
+    
+    Args:
+        message: The message to send to Slack (supports Slack markdown)
+    """
+    webhook_url = os.getenv("SLACK_WEBHOOK_URL")
+    if not webhook_url:
+        return "Error: SLACK_WEBHOOK_URL environment variable not set"
+    
+    try:
+        # TODO: Import requests library
+        # TODO: Send POST request to webhook_url with JSON payload
+        # TODO: Include the message in the JSON data
+        # TODO: Handle the response and return appropriate status
+        
+        # For now, return a placeholder
+        return f"TODO: Implement Slack webhook POST request for message: {message[:50]}..."
+        
+    except Exception as e:
+        return f"Error sending message: {str(e)}"
+
+
+# ===== New Module 3: Slack Formatting Prompts =====
+
+@mcp.prompt()
+async def format_ci_failure_alert():
+    """Create a Slack alert for CI/CD failures with rich formatting."""
+    return """Format this GitHub Actions failure as a Slack message using ONLY Slack markdown syntax:
+
+❌ *CI Failed* - [Repository Name]
+
+> Brief summary of what failed
+
+*Details:*
+• Workflow: `workflow_name`
+• Branch: `branch_name`  
+• Commit: `commit_hash`
+
+*Next Steps:*
+• <https://github.com/test/repo/actions/runs/123|View Action Logs>
+
+CRITICAL: Use EXACT Slack link format: <https://full-url|Link Text>
+Examples:
+- CORRECT: <https://github.com/user/repo|Repository>
+- WRONG: [Repository](https://github.com/user/repo)
+- WRONG: https://github.com/user/repo
+
+Other Slack formats:
+- *text* for bold (NOT **text**)
+- `text` for code
+- > text for quotes
+- • for bullets"""
+
+
+@mcp.prompt()
+async def format_ci_success_summary():
+    """Create a Slack message celebrating successful deployments."""
+    return """Format this successful GitHub Actions run as a Slack message using ONLY Slack markdown syntax:
+
+✅ *Deployment Successful* - [Repository Name]
+
+> Brief summary of what was deployed
+
+*Changes:*
+• Key feature or fix 1
+• Key feature or fix 2
+
+*Links:*
+• <https://github.com/user/repo|View Changes>
+
+CRITICAL: Use EXACT Slack link format: <https://full-url|Link Text>
+Examples:
+- CORRECT: <https://github.com/user/repo|Repository>
+- WRONG: [Repository](https://github.com/user/repo)
+- WRONG: https://github.com/user/repo
+
+Other Slack formats:
+- *text* for bold (NOT **text**)
+- `text` for code
+- > text for quotes
+- • for bullets"""
+
+
+# ===== Prompts from Module 2 (Complete) =====
 
 @mcp.prompt()
 async def analyze_ci_results():
@@ -391,7 +455,8 @@ Structure your response as:
 
 if __name__ == "__main__":
     # Run MCP server normally
-    print("Starting PR Agent MCP server...")
+    print("Starting PR Agent Slack MCP server...")
+    print("Make sure to set SLACK_WEBHOOK_URL environment variable")
     print("To receive GitHub webhooks, run the webhook server separately:")
     print("  python webhook_server.py")
     mcp.run()

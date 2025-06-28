@@ -79,7 +79,7 @@ def test_starter_runs():
         # Try to import and check if server can be initialized
         import server
         # If we can import it and it has the right attributes, it should run
-        if hasattr(server, 'mcp') and hasattr(server, 'get_recent_actions_events'):
+        if hasattr(server, 'mcp') and hasattr(server, 'send_slack_notification'):
             print("✓ Server imports and initializes correctly")
             return True
         else:
