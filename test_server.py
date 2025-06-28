@@ -62,15 +62,9 @@ class TestAnalyzeFileChanges:
             result = await analyze_file_changes()
             data = json.loads(result)
             
-            # For starter code, accept error messages; for full implementation, expect data
-            is_implemented = not ("error" in data and "Not implemented" in str(data.get("error", "")))
-            if is_implemented:
-                # Check for some expected fields (flexible to allow different implementations)
-                assert any(key in data for key in ["files_changed", "files", "changes", "diff"]), \
-                    "Result should include file change information"
-            else:
-                # Starter code - just verify it returns something structured
-                assert isinstance(data, dict), "Should return a JSON object even if not implemented"
+            # Check for some expected fields (flexible to allow different implementations)
+            assert any(key in data for key in ["files_changed", "files", "changes", "diff"]), \
+                "Result should include file change information"
 
 
 @pytest.mark.skipif(not IMPORTS_SUCCESSFUL, reason="Imports failed")
@@ -85,14 +79,7 @@ class TestGetPRTemplates:
         assert isinstance(result, str), "Should return a string"
         # Should be valid JSON
         data = json.loads(result)
-        
-        # For starter code, accept error messages; for full implementation, expect list
-        is_implemented = not ("error" in data and isinstance(data, dict))
-        if is_implemented:
-            assert isinstance(data, list), "Should return a JSON array of templates"
-        else:
-            # Starter code - just verify it returns something structured
-            assert isinstance(data, dict), "Should return a JSON object even if not implemented"
+        assert isinstance(data, list), "Should return a JSON array of templates"
     
     @pytest.mark.asyncio
     async def test_returns_templates(self):
@@ -100,20 +87,14 @@ class TestGetPRTemplates:
         result = await get_pr_templates()
         templates = json.loads(result)
         
-        # For starter code, accept error messages; for full implementation, expect templates
-        is_implemented = not ("error" in templates and isinstance(templates, dict))
-        if is_implemented:
-            assert len(templates) > 0, "Should return at least one template"
-            
-            # Check that templates have expected structure
-            for template in templates:
-                assert isinstance(template, dict), "Each template should be a dictionary"
-                # Should have some identifying information
-                assert any(key in template for key in ["filename", "name", "type", "id"]), \
-                    "Templates should have an identifier"
-        else:
-            # Starter code - just verify it's structured correctly
-            assert isinstance(templates, dict), "Should return structured error for starter code"
+        assert len(templates) > 0, "Should return at least one template"
+        
+        # Check that templates have expected structure
+        for template in templates:
+            assert isinstance(template, dict), "Each template should be a dictionary"
+            # Should have some identifying information
+            assert any(key in template for key in ["filename", "name", "type", "id"]), \
+                "Templates should have an identifier"
 
 
 @pytest.mark.skipif(not IMPORTS_SUCCESSFUL, reason="Imports failed")
@@ -142,15 +123,9 @@ class TestSuggestTemplate:
         )
         suggestion = json.loads(result)
         
-        # For starter code, accept error messages; for full implementation, expect suggestion
-        is_implemented = not ("error" in suggestion and "Not implemented" in str(suggestion.get("error", "")))
-        if is_implemented:
-            # Check for some expected fields (flexible to allow different implementations)
-            assert any(key in suggestion for key in ["template", "recommended_template", "suggestion"]), \
-                "Should include a template recommendation"
-        else:
-            # Starter code - just verify it's structured correctly
-            assert isinstance(suggestion, dict), "Should return structured error for starter code"
+        # Check for some expected fields (flexible to allow different implementations)
+        assert any(key in suggestion for key in ["template", "recommended_template", "suggestion"]), \
+            "Should include a template recommendation"
 
 
 @pytest.mark.skipif(not IMPORTS_SUCCESSFUL, reason="Imports failed")
