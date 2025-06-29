@@ -1,7 +1,79 @@
 #!/usr/bin/env python3
 """
-Simple webhook server for GitHub Actions events.
-Stores events in a JSON file that the MCP server can read.
+GitHub Actions Webhook Server
+
+This is a lightweight HTTP server that receives GitHub webhook events and stores them
+for processing by the MCP (Model Context Protocol) server. It serves as the bridge
+between GitHub Actions and AI assistants like Claude.
+
+OVERVIEW:
+---------
+This server provides a webhook endpoint that GitHub can POST to when Actions events
+occur (workflow runs, check runs, etc.). Events are stored in a JSON file that the
+MCP server reads to provide CI/CD insights and automation.
+
+ARCHITECTURE:
+------------
+GitHub Actions → Webhook → Cloudflare Tunnel → This Server → JSON Storage → MCP Server → AI Assistant
+
+KEY FEATURES:
+------------
+• Receives GitHub webhook events via HTTP POST
+• Stores events in rolling JSON file (last 100 events)
+• Provides health check endpoint for monitoring
+• Handles GitHub event types: workflow_run, check_run, etc.
+• Async/await architecture for high performance
+• Error handling and logging
+
+ENDPOINTS:
+---------
+• GET  /           - Health check endpoint
+• POST /webhook/github - GitHub webhook receiver
+
+USAGE:
+------
+1. Start the server: python webhook_server.py
+2. Expose via tunnel: cloudflared tunnel --url http://localhost:8080
+3. Configure GitHub webhook with the tunnel URL + /webhook/github
+4. Events will be stored in github_events.json for MCP server consumption
+
+CONFIGURATION:
+-------------
+• Port: 8080 (hardcoded)
+• Host: localhost (local only, exposed via tunnel)
+• Storage: github_events.json (same directory)
+• Event limit: 100 events (rolling buffer)
+
+DEPENDENCIES:
+------------
+• aiohttp: Async HTTP server framework
+• json: Event serialization
+• datetime: Timestamp generation
+• pathlib: File path handling
+
+SECURITY NOTES:
+--------------
+• Server runs on localhost only (not exposed directly)
+• Cloudflare tunnel provides HTTPS termination
+• No authentication implemented (add webhook secret for production)
+• Input validation on JSON payloads
+
+MONITORING:
+----------
+• Health check endpoint returns server status
+• Events include timestamps for tracking
+• Server logs startup information
+• Cloudflare provides request metrics
+
+INTEGRATION:
+-----------
+This server works with:
+• GitHub Actions (webhook source)
+• Cloudflare Tunnels (secure exposure)
+• MCP Server (event consumer)
+• AI Assistants (end user)
+
+For more details, see PROJECT_DOCUMENTATION.md
 """
 
 import json
