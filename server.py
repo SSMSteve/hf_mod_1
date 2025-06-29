@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Module 3: Slack Notification Integration
+Module 3: Slack Notification Integration - Complete Solution
 Combines all MCP primitives (Tools and Prompts) for complete team communication workflows.
 """
 
 import json
 import os
 import subprocess
+import requests
 from typing import Optional
 from pathlib import Path
 
@@ -56,7 +57,8 @@ TYPE_MAPPING = {
 async def analyze_file_changes(
     base_branch: str = "main",
     include_diff: bool = True,
-    max_diff_lines: int = 500
+    max_diff_lines: int = 500,
+    working_directory: Optional[str] = None
 ) -> str:
     """Get the full diff and list of changed files in the current git repository.
     
@@ -64,21 +66,39 @@ async def analyze_file_changes(
         base_branch: Base branch to compare against (default: main)
         include_diff: Include the full diff content (default: true)
         max_diff_lines: Maximum number of diff lines to include (default: 500)
+        working_directory: Directory to run git commands in (default: current directory)
     """
     try:
+        # Try to get working directory from roots first
+        if working_directory is None:
+            try:
+                context = mcp.get_context()
+                roots_result = await context.session.list_roots()
+                # Get the first root - Claude Code sets this to the CWD
+                root = roots_result.roots[0]
+                # FileUrl object has a .path property that gives us the path directly
+                working_directory = root.uri.path
+            except Exception:
+                # If we can't get roots, fall back to current directory
+                pass
+        
+        # Use provided working directory or current directory
+        cwd = working_directory if working_directory else os.getcwd()
         # Get list of changed files
         files_result = subprocess.run(
             ["git", "diff", "--name-status", f"{base_branch}...HEAD"],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            cwd=cwd
         )
         
         # Get diff statistics
         stat_result = subprocess.run(
             ["git", "diff", "--stat", f"{base_branch}...HEAD"],
             capture_output=True,
-            text=True
+            text=True,
+            cwd=cwd
         )
         
         # Get the actual diff if requested
@@ -88,7 +108,8 @@ async def analyze_file_changes(
             diff_result = subprocess.run(
                 ["git", "diff", f"{base_branch}...HEAD"],
                 capture_output=True,
-                text=True
+                text=True,
+                cwd=cwd
             )
             diff_lines = diff_result.stdout.split('\n')
             
@@ -105,7 +126,8 @@ async def analyze_file_changes(
         commits_result = subprocess.run(
             ["git", "log", "--oneline", f"{base_branch}..HEAD"],
             capture_output=True,
-            text=True
+            text=True,
+            cwd=cwd
         )
         
         analysis = {
@@ -245,22 +267,40 @@ async def send_slack_notification(message: str) -> str:
     
     Args:
         message: The message to send to Slack (supports Slack markdown)
+        
+    IMPORTANT: For CI failures, use format_ci_failure_alert prompt first!
+    IMPORTANT: For deployments, use format_ci_success_summary prompt first!
     """
     webhook_url = os.getenv("SLACK_WEBHOOK_URL")
     if not webhook_url:
         return "Error: SLACK_WEBHOOK_URL environment variable not set"
     
     try:
-        # TODO: Import requests library
-        # TODO: Send POST request to webhook_url with JSON payload
-        # TODO: Include the message in the JSON data
-        # TODO: Handle the response and return appropriate status
+        # Prepare the payload with proper Slack formatting
+        payload = {
+            "text": message,
+            "mrkdwn": True
+        }
         
-        # For now, return a placeholder
-        return f"TODO: Implement Slack webhook POST request for message: {message[:50]}..."
+        # Send POST request to Slack webhook
+        response = requests.post(
+            webhook_url,
+            json=payload,
+            timeout=10
+        )
         
+        # Check if request was successful
+        if response.status_code == 200:
+            return "✅ Message sent successfully to Slack"
+        else:
+            return f"❌ Failed to send message. Status: {response.status_code}, Response: {response.text}"
+        
+    except requests.exceptions.Timeout:
+        return "❌ Request timed out. Check your internet connection and try again."
+    except requests.exceptions.ConnectionError:
+        return "❌ Connection error. Check your internet connection and webhook URL."
     except Exception as e:
-        return f"Error sending message: {str(e)}"
+        return f"❌ Error sending message: {str(e)}"
 
 
 # ===== New Module 3: Slack Formatting Prompts =====
@@ -270,17 +310,15 @@ async def format_ci_failure_alert():
     """Create a Slack alert for CI/CD failures with rich formatting."""
     return """Format this GitHub Actions failure as a Slack message using ONLY Slack markdown syntax:
 
-❌ *CI Failed* - [Repository Name]
+:rotating_light: *CI Failure Alert* :rotating_light:
 
-> Brief summary of what failed
+A CI workflow has failed:
+*Workflow*: workflow_name
+*Branch*: branch_name
+*Status*: Failed
+*View Details*: <https://github.com/test/repo/actions/runs/123|View Logs>
 
-*Details:*
-• Workflow: `workflow_name`
-• Branch: `branch_name`  
-• Commit: `commit_hash`
-
-*Next Steps:*
-• <https://github.com/test/repo/actions/runs/123|View Action Logs>
+Please check the logs and address any issues.
 
 CRITICAL: Use EXACT Slack link format: <https://full-url|Link Text>
 Examples:
@@ -288,11 +326,12 @@ Examples:
 - WRONG: [Repository](https://github.com/user/repo)
 - WRONG: https://github.com/user/repo
 
-Other Slack formats:
+Slack formatting rules:
 - *text* for bold (NOT **text**)
 - `text` for code
 - > text for quotes
-- • for bullets"""
+- Use simple bullet format without special characters
+- :emoji_name: for emojis"""
 
 
 @mcp.prompt()
@@ -300,16 +339,16 @@ async def format_ci_success_summary():
     """Create a Slack message celebrating successful deployments."""
     return """Format this successful GitHub Actions run as a Slack message using ONLY Slack markdown syntax:
 
-✅ *Deployment Successful* - [Repository Name]
+:white_check_mark: *Deployment Successful* :white_check_mark:
 
-> Brief summary of what was deployed
+Deployment completed successfully for [Repository Name]
 
 *Changes:*
-• Key feature or fix 1
-• Key feature or fix 2
+- Key feature or fix 1
+- Key feature or fix 2
 
 *Links:*
-• <https://github.com/user/repo|View Changes>
+<https://github.com/user/repo|View Changes>
 
 CRITICAL: Use EXACT Slack link format: <https://full-url|Link Text>
 Examples:
@@ -317,11 +356,12 @@ Examples:
 - WRONG: [Repository](https://github.com/user/repo)
 - WRONG: https://github.com/user/repo
 
-Other Slack formats:
+Slack formatting rules:
 - *text* for bold (NOT **text**)
 - `text` for code
 - > text for quotes
-- • for bullets"""
+- Use simple bullet format with - or *
+- :emoji_name: for emojis"""
 
 
 # ===== Prompts from Module 2 (Complete) =====
@@ -338,11 +378,11 @@ async def analyze_ci_results():
 
 Format your response as:
 ## CI/CD Status Summary
-- **Overall Health**: [Good/Warning/Critical]
-- **Failed Workflows**: [List any failures with links]
-- **Successful Workflows**: [List recent successes]
-- **Recommendations**: [Specific actions to take]
-- **Trends**: [Any patterns you notice]"""
+- *Overall Health*: [Good/Warning/Critical]
+- *Failed Workflows*: [List any failures with links]
+- *Successful Workflows*: [List recent successes]
+- *Recommendations*: [Specific actions to take]
+- *Trends*: [Any patterns you notice]"""
 
 
 @mcp.prompt()
@@ -356,14 +396,14 @@ async def create_deployment_summary():
 
 Format as a concise message suitable for Slack:
 
-🚀 **Deployment Update**
-- **Status**: [✅ Success / ❌ Failed / ⏳ In Progress]
-- **Environment**: [Production/Staging/Dev]
-- **Version/Commit**: [If available from workflow data]
-- **Duration**: [If available]
-- **Key Changes**: [Brief summary if available]
-- **Issues**: [Any problems encountered]
-- **Next Steps**: [Required actions if failed]
+🚀 *Deployment Update*
+- *Status*: [✅ Success / ❌ Failed / ⏳ In Progress]
+- *Environment*: [Production/Staging/Dev]
+- *Version/Commit*: [If available from workflow data]
+- *Duration*: [If available]
+- *Key Changes*: [Brief summary if available]
+- *Issues*: [Any problems encountered]
+- *Next Steps*: [Required actions if failed]
 
 Keep it brief but informative for team awareness."""
 
@@ -383,21 +423,21 @@ Create a detailed report with:
 ## 📋 PR Status Report
 
 ### 📝 Code Changes
-- **Files Modified**: [Count by type - .py, .js, etc.]
-- **Change Type**: [Feature/Bug/Refactor/etc.]
-- **Impact Assessment**: [High/Medium/Low with reasoning]
-- **Key Changes**: [Bullet points of main modifications]
+- *Files Modified*: [Count by type - .py, .js, etc.]
+- *Change Type*: [Feature/Bug/Refactor/etc.]
+- *Impact Assessment*: [High/Medium/Low with reasoning]
+- *Key Changes*: [Bullet points of main modifications]
 
 ### 🔄 CI/CD Status
-- **All Checks**: [✅ Passing / ❌ Failing / ⏳ Running]
-- **Test Results**: [Pass rate, failed tests if any]
-- **Build Status**: [Success/Failed with details]
-- **Code Quality**: [Linting, coverage if available]
+- *All Checks*: [✅ Passing / ❌ Failing / ⏳ Running]
+- *Test Results*: [Pass rate, failed tests if any]
+- *Build Status*: [Success/Failed with details]
+- *Code Quality*: [Linting, coverage if available]
 
 ### 📌 Recommendations
-- **PR Template**: [Suggested template and why]
-- **Next Steps**: [What needs to happen before merge]
-- **Reviewers**: [Suggested reviewers based on files changed]
+- *PR Template*: [Suggested template and why]
+- *Next Steps*: [What needs to happen before merge]
+- *Reviewers*: [Suggested reviewers based on files changed]
 
 ### ⚠️ Risks & Considerations
 - [Any deployment risks]
@@ -420,20 +460,20 @@ Structure your response as:
 ## 🔧 Workflow Troubleshooting Guide
 
 ### ❌ Failed Workflow Details
-- **Workflow Name**: [Name of failing workflow]
-- **Failure Type**: [Test/Build/Deploy/Lint]
-- **First Failed**: [When did it start failing]
-- **Failure Rate**: [Intermittent or consistent]
+- *Workflow Name*: [Name of failing workflow]
+- *Failure Type*: [Test/Build/Deploy/Lint]
+- *First Failed*: [When did it start failing]
+- *Failure Rate*: [Intermittent or consistent]
 
 ### 🔍 Diagnostic Information
-- **Error Patterns**: [Common error messages or symptoms]
-- **Recent Changes**: [What changed before failures started]
-- **Dependencies**: [External services or resources involved]
+- *Error Patterns*: [Common error messages or symptoms]
+- *Recent Changes*: [What changed before failures started]
+- *Dependencies*: [External services or resources involved]
 
 ### 💡 Possible Causes (ordered by likelihood)
-1. **[Most Likely]**: [Description and why]
-2. **[Likely]**: [Description and why]
-3. **[Possible]**: [Description and why]
+1. *[Most Likely]*: [Description and why]
+2. *[Likely]*: [Description and why]
+3. *[Possible]*: [Description and why]
 
 ### ✅ Suggested Fixes
 **Immediate Actions:**
